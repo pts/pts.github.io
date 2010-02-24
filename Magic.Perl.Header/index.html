@@ -1,0 +1,17 @@
+<html><head>
+<title>The Magic Perl Header</title>
+</head><body>
+<ul>
+<li>the <a href="latest.txt">latest source of the Magic Perl Header</a>
+<li>the <a href="magicc.txt">Magic Perl Header article</a>
+<li>the <a href="magicc.pl.zip">Magic Perl Header generator script</a>
+    to add the Magic Perl Header automatically to your Perl scripts
+</ul>
+<pre>#! /bin/sh
+eval '(exit $?0)' &amp;&amp; eval 'PERL_BADLANG=x;PATH="$PATH:.";export PERL_BADLANG\
+;exec perl -x -S -- "$0" ${1+"$@"};#'if 0;eval 'setenv PERL_BADLANG x\
+;setenv PATH "$PATH":.;exec perl -x -S -- "$0" $argv:q;#'.q
+#!perl -w
++push@INC,'.';$0=~/(.*)/s;do(index($1,"/")&lt;0?"./$1":$1);die$@if$@__END__+if 0
+;#Don't touch/remove lines 1--7: http://www.inf.bme.hu/~pts/Magic.Perl.Header</pre>
+</body></html>

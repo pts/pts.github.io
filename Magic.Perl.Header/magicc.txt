@@ -1,338 +1,713 @@
 How to start a Perl script?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+an article to a Perl magazine
+by Péter Szabó <pts@fazekas.hu>
+
+An improved version of this article appeared here:
+
+@article{magic_perl_header,
+  title={A Magic Header for Starting {Perl} scripts},
+  author={Péter Szabó},
+  url={http://i.cmpnet.com/ddj/tpj/images/tpj0304/0304tpj.pdf},
+  year=2003,
+  journal={The {Perl} Journal},
+  month=apr,
+  pages={13--15},
+}
+
 Abstract
 ~~~~~~~~
 Most Perl scripts start with a line beginning with `#!' and containing the
 world `perl' (for example: `#!/usr/local/bin/perl -w'). This line tells the
-UNIX operating system that it shouldn't execute the current file directly,
-but it should invoke the specified `perl' interpreter with the specified
-options, and that interpreter will take care of the Perl script. Although
-the concept of this first line is simple, writing it to be compatible tends
-to be really hard since there is no standard location for the `perl'
-interpreter, and some older UNIX systems impose very strict rules on what
-can be specified in the `#!' line.
+UNIX operating system that it shouldn't treat the current file as a binary
+executable, but it should invoke the specified `perl' interpreter with the
+specified options, and that interpreter will take care of the Perl script.
+Although the concept of this first line is simple, writing it to be
+compatible tends to be really hard since there is no standard location for
+the `perl' interpreter, and some older UNIX systems impose very strict rules
+on what can be specified in the `#!' line.
 
 This article describes the Magic Perl Header, an extremely compatible
 multi-line solution for starting a Perl script on any UNIX operating system.
 
+Assumptions
+~~~~~~~~~~~
+Suppose you're developing a Perl script, and you plan to distribute it on
+the web to attract the widest audience possible. You want your script to
+work without modification on many platforms and many operating systems.
+
+The Perl interpreter is one of the best choices for writing portable
+scripts, because Perl has been ported to more than 50 operating systems,
+including tons of UNIX variants, many Mac variants and all Win32 variants.
+There are, however, some OS-specific issues you have to be aware of:
+
+-- finding the `perl' interpreter on $PATH to execute your script
+-- path naming (such as the directory separator, the drive letter etc.)
+-- opening files in binary mode (use the binmode() Perl builtin)
+-- working with filenames with arbitrary Unicode characters
+-- quoting of spaces, asterisks and other funny characters
+   from the shell
+-- one-liner limitations
+-- different APIs for graphical user interfaces
+-- Use the `$^O' variable to distinguish between operating systems
+
+Fortunately the TCP/IP socket layer, database interfaces (DBD and DBI) and
+web server-side scripting (e.g. Apache mod_perl) require no modification in
+your scripts: if such a feature is available, then it is also
+system-independent.
+
+This article focuses on the UNIX-specific aspects of the first issue
+mentioned above (finding the `perl' interpreter and starting your script).
+Although this seems to be trivial for the first time, as there are
+traditional and well-established ways of starting scripts on UNIX systems,
+making it portable to old, cruel or badly configured Unices involves many
+tricks, and even some deep wizardry that we, Perl hackers, enjoy so much.
+
+Program startup on UNIX systems
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+New processes are spawned by fork(2)ing the current process to create a
+child process, and calling the execve(2) system call in the child to execute
+the specified program. execve(2) expects an executable name, an argument
+list, and a list of environment variables. Many programs written in C use
+the execlp(3) library call instead (similar to the Perl exec() builtin),
+which automatically searches the directories specified in the $PATH
+environment variable for the executable. Another popular way of starting
+programs is the system(3) library call (also a builtin function in Perl),
+which does the fork(2) too, and invokes the shell to do the word splitting,
+filename expansion etc. Thus, the following do essentially the same:
+
+	# Perl code 1
+	if (fork) { wait } else { exec "/bin/sh", "-c", "ls", "/tmp" }
+
+	# Perl code 2
+	system "ls  /tmp";
+
+Perl scripts are executed by the `perl' interpreter, which is assumed to be
+on the $PATH. Thus, the simple command `perl my_script.pl' can be used to
+start a Perl script. This is a quite compatible solution for invoking your
+script, provided that you don't make my_script.pl executable (i.e no
+`chmod +x my_script.pl'), and the first line of my_script.pl doesn't begin
+with `#!'.
+
+You can create a Perl module instead of a Perl script:
+
+	## Perl module my_hello.pm
+	sub hello($) { "Hello, $_[0]!\n" }
+	sub unimport() {
+	  print hello "World";
+	}
+	1
+
+This Perl module can be loaded with `perl -m-my_hello'. There is a long and
+inconvenient startup command that also works when my_hello.pm is not in the
+current directory, nor is it on the `@INC' list, where Perl looks for
+modules. So this `-m-' solution is not recommended, becuse it restricts the
+users of your program in where they cat put the file.
+
+Complicated Perl programs are usually composed of several modules and a main
+script. The location of the modules is not a big concern, because once the
+main script has been loaded, it can use the `BEGIN { push @INC, ... }' trick
+before use'ing its modules. From now on this article focuses on scripts
+only.
+
+In some non-interactive situations you don't have the opportunity to specify
+`perl ' in the command line. The typical example is a CGI script. When the
+webserver calls your script, it effectively does
+
+	chdir "/home/doe/public_html";
+	exec "./my_cgi.pl";
+
+Thus my_cgi.pl has to be an executable (as set by `chmod +x my_cgi.pl'), and
+it has to be in the appopriate file format understood by the operating
+system. Most UNIX systems today don't understand Perl code natively, but
+they provide the so-called `#!'-hack that makes possible to run CGI scripts
+written in Perl. The `#!'-hack also saves a couple of keystrokes for users
+of your interactive scripts: the user may invoke the script as a normal UNIX
+command `./my_script.pl', instead of `perl my_script.pl'. She doesn't even
+have to know that the script was written in Perl.
+
+If an executable file starts with `#!', the OS reads the remaining
+characters from the first line, appends the filename, and invokes the
+resulting command. Thus shell scripts tend to start with their first line
+containing `#! /bin/sh' or `#! /bin/bash --', AWK scripts begin with `#!
+/usr/bin/awk', and Perl scripts begin with `#! /usr/local/bin/perl -w'. When
+the user types `my_script.pl -opt arg' at the command prompt -- or
+equivalently: system("my_script.pl -opt arg") is called either from C or
+Perl, the following will happen:
+
+0. In case of system(3), /bin/sh is invoked with the `-c COMMAND' option. In
+   the interactive case, the active shell itself (/bin/sh or any other
+   shell the user is currently running) parses the command.
+
+1. The shell does various substitutions (such as substituting $VARIABLE
+   values, expanding wildchards `*' and `?'), and word splitting.
+   The result is a list of 3 words: `my_script.pl', `-opt', `arg'.
+   `my_script.pl' is not a builtin command, so the shell tries to execute an
+   external program with that name.
+
+2. The execlp(3) library function (part of the libc) examines the $PATH
+   environment variable. Let its contents be `.:/usr/local/bin:/usr/bin:/bin'.
+   The first directory in which the file `my_script.pl' exists is `.', so the
+   complete executable name is `./my_script.pl'. If you omit the directory `.'
+   from the $PATH, programs won't be searched in the (search-time) current
+   directory.
+
+3. The execve(2) system call (part of the OS) opens the file
+   `./my_script.pl', and reads the first two characters: `#!'. After that,
+   it reads the whole line: `#! /usr/local/bin/perl -w'. It does a simple
+   word splitting, which results to the following command line:
+   `/usr/local/bin/perl', `-w', `./my_script.pl', `-opt', `arg'.
+
+4. The OS opens /usr/local/bin/perl, and sees that it is a binary
+   executable compiled for the right architecture, so the system begins
+   running it.
+
+5. The file contains the Perl interpreter. After initialization, it examimes
+   the command line arguments according to the perlrun(1) manual page. The
+   command line says that the script contained in the file ./my_script.pl
+   should be compiled and executed with warnings enabled.
+
+6. Perl opens the file and sees that the first line contains `#!'. Since the
+   first line also contains the word `perl', Perl treats the file as a Perl
+   script. (Warnings are enabled again, because Perl parses the options
+   again, for compatibility reasons.) It is a unique compatibility
+   (mis)feature of Perl, that if the first line was, for example, `#!
+   /bin/bash', Perl would immediately do an execl(3) with the list
+   (`/bin/bash', `./my_script.pl', `-opt', `arg').
+
+7. In the compilation phase, the first line is ignored since it's a comment.
+   `use' statements, `BEGIN' and `END' blocks are executed immediately.
+   Subroutines are insterted into the `main::' namespace. Compilation stops
+   at EOF or the first `__END__' or `__DATA__' token.
+
+8. The execution of the precompled script begins. $0 is './my_script.pl'.
+   @ARGV is ('-opt', 'arg'). $^W is 1.
+
+When the user types `perl ./my_script.pl -opt arg', essentially the same
+happens, but it starts at step 4, with the exception that the `perl' binary
+found on $PATH will be opened, which is not necessarily /usr/local/bin/perl.
+This is a very important compatibility advantage, which is impossible to
+achieve using `#!', because some operating systems require an absolute
+filename after `#!'.
+
+Specifying `#! /usr/local/bin/perl -w' will cause a confusing `my_script.pl:
+No such file or directory' message on many out-of-the-box Linux systems, on
+which `perl' is located in /usr/bin/. Specifying `#! /usr/bin/perl -w' solves
+the problem on those Linux boxes, but will break compatibility with most
+Solaris systems, on which the de facto standard place for `perl' is
+/usr/local/bin/perl. The bad news is that there is no standard place for
+`perl' to be specified after `#!'. You may chose between:
+
+-- specifying the path that works of the majority of your user base
+-- documenting the incompatibility, and politely asking the users to
+   manually modify your scripts in case of trouble
+-- writing an install script to automate the modifications (but how will
+   the user start the install script :-)? -- by typing `perl install.pl')
+-- find a magic solution that works anywhere
+
+When the author of the article faced this problem, he decided to spend a
+couple of days developing the magic solution. The search for an ultimate,
+UNIX-wide compatible Perl header began.
+
 Common one-line pitfalls
 ~~~~~~~~~~~~~~~~~~~~~~~~
+The most obvious `#!' one-liners are just not good enough:
+
 -- Specifying `#!/usr/local/bin/perl -w -T' doesn't work, because some UNIX
-   operating systems allow only a single command line swich after `#!'.
+   operating systems allow only a single command line switch after `#!'.
+   -- Doesn't work on Linux.
 -- Specifying `#!/usr/local/bin/perl -wT' doesn't work, because some
-   UNIX operating systems expect a space after `#!'.
--- Specifying `#! /usr/local/bin/perl -wT' doesn't work, because `perl' is
-   located in /usr/bin or somewhere else on some systems (e.g Debian Linux).
-   (Remember: your script may be used by dumb users who are not smart enough
+   UNIX operating systems expect a space after `#!'. -- Works on Linux
+   if /usr/local/bin/perl exists (usually not).
+-- Specifying `#! /usr/local/bin/perl -wT' doesn't work, because `perl'
+   might be located in /usr/bin or somewhere else (e.g on Debian Linux).
+   (Remember: the user of your script may not be educated enough to be able
    to find the `perl' binary and modify the first line of the script
-   accordingly. They will report that your program doesn't work, or they
-   will tell everyone that your program is buggy and useless.)
+   accordingly; or in some security configurations she may not have the
+   permission to do it, even when she knows exactly what to change.) --
+   Usually doesn't work on out-of-the-box Linux.
 -- Specifying `#! perl -wT' doesn't work, because some UNIX operating systems
    expect an absolute executable name (starting with `/') after `#! '.
+   -- Doesn't work on Linux.
 -- Specifying `#! /usr/bin/env perl -wT' doesn't work, because some systems
-   allow only zero or one argument after the command name. (Moreover, 
-   in some systems there is a limit for the overall length of the 1st line.)
-   It would be really hard to specify the `-T' switch from anywhere else than
+   allow only zero or one argument after the command name. (Moreover, in
+   some systems there is a limit for the overall length of the 1st line --
+   as  few as 32 or 64 characters.) It
+   would be really hard to specify the `-T' switch from anywhere else than
    the command line. (The `-w' switch is easier: just write `BEGIN{$^W=1}'
    in front of the Perl code.) The `-T' switch is a security switch, and
-   specifying it too late opens the backdoor for malicious accidents. The
-   programmer has to be extremely careful here, but she cannot, since she
-   does not have a place to specify the correct switches.
+   specifying it too late opens the backdoor for malicious accidents. You
+   (the programmer) should be extremely careful here, but you cannot,
+   since there is no place to specify the correct switches. -- Doesn't work on
+   Linux.
 -- Specifying `#! /usr/bin/env perl' doesn't work either, because `env'
-   might be missing or located somewhere else on some systems.
+   might be missing or located somewhere else on some systems. -- Works on
+   Linux.
 
-Steps to the solution
-~~~~~~~~~~~~~~~~~~~~~
--- Now it is clear that there is no single-`#!'-line solution to the problem
-   in the general case. The idea is to write a shell script (which will be 
-   runned by the shell (e.g GNU Bash), not Perl), that will find the `perl'
-   executable on the $PATH, and run it with the correct switches. A
-   candidate for the solution is:
-   
+The conclusions of the attempts above are:
+
+-- if the file doesn't begin with `#!', it may be treated as a binary
+   exacutable
+-- if the file begins with `#!', either the interpreter specified there will
+   be executed, on /bin/sh
+-- /bin/sh is a traditional UNIX shell variant (any of Bourne, C or Korn)
+
+On the way
+~~~~~~~~~~
+Now it is clear that there is no single-`#!'-line solution to the problem
+in the general case, because there is no portable way to start Perl to run a
+script (!). The only portable beginning for script is:
+
 	#! /bin/sh
-	eval 'exec perl -S $0 ${1+"$@"}'
-	if 0;
+
+, which is known to start any of the 3 shell variants. (The line
+`#! /bin/sh --' seen in many shell scripts to allow arbitrary filenames for
+the executable won't work here, because tcsh gives an error for the `--'
+switch.)
+
+-- We can write a simple shell wrapper, that  that will find the `perl'
+   executable on the $PATH, and run it with the correct switches.
+   A candidate for the solution is:
+
+	## file my_script.sh, version 1
+	#! /bin/sh
+	perl my_script.pl
+
+	## file my_script.pl
 	# real Perl code begins here
 
-   This won't work, because Perl doesn't run the script itself if the first
-   line begins with `#!' and it doesn't contain the word `perl'. See the
-   beginning of the perlrun(1) manual page for further details.
-
--- The simple trick to include `perl' into the 1st line:
-
-	#! /bin/sh # -*- perl -*-
-	eval 'exec perl -S $0 ${1+"$@"}'
-	if 0;
-	# real Perl code begins here
-
-   This doesn't work on systems that allow only a single command name
-   and zero or one argument in the line beginning with `#!'. The solution
-   has another problem: if the filename contains a space, the shell would
-   split it, and if the filename begins with `-', the shell and Perl would
-   interpret the `-' as a command-line option.
-
--- We can use Perl's `-x' switch to make it skip the beginning of the file
-   till the first `#!perl' line. We also fix the space and `-' problem in
-   filenames:
-
-	#! /bin/sh --
-	eval 'exec perl -S -x -- "$0" ${1+"$@"}'
-	if 0;
-	#!perl -w
-	# real Perl code begins here
-	
-   This solution still has deficiencies: it reports line numbers of errors
-   relative to the `#!perl -w' line, it doesn't work in the C shell
-   (csh), and it still prints warnings when locale settings are invalid.
-   (Try setting `export LANG=invalid' in Bash before running the script.)
-
-   But despite the deficiencies, it the subtle bilingual tricks in this
-   script are worth studying. When the file is read by `perl -x', it quickly
-   skips to the real Perl code. When the file is read by the shell, it
-   executes the line with `eval': it calls the `perl' interpreter on the
-   $PATH with the script filename and command line arguments. The
-   double-quotes and `$@' are shell script wizardry, so things will work
-   even when arguments contain spaces or quotes. The `-S' option tells Perl
-   to search for the file on the $PATH again, because most shells leave `$0'
-   unchanged (i.e `$0' is the command the user has typed in). Although the
-   second and the third line contain valid (but no-op) Perl code, Perl never
-   interprets these lines, because the first line tells Perl to invoke the
-   shell instead, and the shell runs `perl -x', which also skips these
-   lines. However, when the user loads this script with the `do' Perl
-   builtin, the 2nd and the 3rd line gets compiled and interpreted, and a
-   harmless no-op code is run, and no syntax error occurs.
+   This has the following problems:
    
-   Compatibility note: /bin/sh is available on all UNIX systems, but it
-   might be any shell, including Bourne Shell variants (such as Bash and
-   ash), Korn shell variants (such as pdksh and zsh) and C shell variants
-   (such as csh and tcsh). Many UNIX utilities, and the libc system(3)
-   function (conforming to ANSI C, POSIX.2, BSD 4.3) relies on a working
-   /bin/sh. So it is fairly reasonable to assume that /bin/sh exists. Users
-   of non-UNIX systems should invoke this script with `perl -x', and they
-   should read to the perlrun(1) man page.
+   1. doesn't pass command-line arguments
+   2. doesn't propagate exit() status
+   3. cannot find the Perl script on the $PATH -- will take it from the
+      current directory, which is usually wrong, and might be also a
+      security issue
+   4. needs two separate files
 
--- Now, let's eliminate the deficiencies. Error line number reporting can
-   be made correct by using the `do' Perl builtin to re-read the script:
+-- Problems 1--3 can be overcome quite easily:
 
-	BEGIN{ if(!$second_run){ $second_run=1; do($0); die $@ if $@; exit }}
-   
-   `BEGIN' is required here to prevent perl from compiling the whole file
-   and complaining about syntax errors with the wrong line numbers. The
-   `die $@ if $@' instruction will print all error messages correctly. See
-   perlvar(1) for details about `$@'. (Unfortunately, we get an extra error
-   message complaining that BEGIN has failed. We well eliminate this message
-   later.)
-   
-   We can detect the C shell easily:
+	## file my_script.sh, version 2
+	#! /bin/sh
+	exec perl -S -- my_script.pl "$@"
+
+   Compatibility note about different shells: /bin/sh is available on all
+   UNIX systems, but it might be a symlink to any shell, including Bourne
+   Shell variants (such as Bash and ash), Korn shell variants (such as pdksh
+   and zsh) and C shell variants (such as csh and tcsh). Many UNIX
+   utilities, and the libc system(3) function (conforming to ANSI C,
+   POSIX.2, BSD 4.3) relies on a working /bin/sh. So it is fairly reasonable
+   to assume that /bin/sh exists and it is a Bourne-shell variant. On Linux,
+   /bin/sh is usually a symlink to /bin/bash. (On Linux install disks,
+   sometimes it is a symlink to /bin/ash or the builtin ash of BusyBox.)
+   On Win32 MinGW MSYS, /bin/sh is Bash, but there is no /bin/bash.
+   On Solaris, /bin/sh is Sun's own simplistic Bourne-shell clone, and
+   Digital UNIX also has a simple Bourne-shell clone in /bin/sh.
+
+   All of Bourne and Korn shells (such as GNU Bash, ash, zsh, pdksh and
+   Solaris /bin/sh) are capable to interpret my_script.sh correctly. However,
+   C shells use a different notation for ``all the arguments passed to the
+   shell, unmodified'': `$argv:q' instead of `"$@"'. The perlrun(1) manual
+   page describes a memorable construct that detects the C shell:
    
    	eval '(exit $?0)' && eval 'echo "Korn and Bourne"'
    	echo All
    
    The message `All' gets echoed on all 3 shell types, but only Korn and
-   Bourne shells print the `Korn and Bourne' message. We can use
-   `exec perl' instead of `echo' and that's it.
+   Bourne shells print the `Korn and Bourne' message. (In zsh the result
+   depends on the value of $?, but it won't cause a problem since zsh
+   understands both the csh and Bourne shell constructs we use.) The trick
+   here is that `$?' is the exit status of the previous command, with the
+   initial value of zero, but `$?0' in the C shell is a test which
+   returns `1', because the variable `$0' exists.
 
-   The perllocale(1) man page says that PERL_BADLANG should be set to a true
-   value to get rid of locale warnings. Actually, PERL_BADLANG must be set
-   to a non-empty, non-numeric string (i.e `PERL_BADLANG=1' doesn't work).
-   So we set it `PERL_BADLANG=x'. Note that this has no effect if Perl is
-   invoked _before_ the shell, for example all of `perl', `perl -x', `perl
-   -S', `perl -x -S' emit the warning long before the shell has a chance to
-   change PERL_BADLANG.
+-- We can change `echo' in the C shell detection code to `exec perl', and
+   that's it:
+
+	## file my_script.sh, version 3
+	#! /bin/sh
+	eval '(exit $?0)' && exec perl -S -- "$0" "$@"
+	exec perl -S -- "$0" $argv:q
+
+-- Now we're ready to make our first wizard step: combine my_script.pl and
+   my_script.sh into a single file, which invokes itself using `perl' when
+   run from the shell. (Forget about csh-compatibility for a while.) A
+   simple attempt would be:
+   
+	#! /bin/sh
+	eval 'echo DEBUG; exec perl -S $0 ${1+"$@"}'
+	if 0;
+	# real Perl code begins here
+
+   Unfortunately, it doesn't run the real Perl code, but it produces an
+   infinite number of DEBUG messages. That's because Perl has a built-in
+   hack already described in step 6 above: if the first line begins with
+   `#!' and it doesn't contain the word `perl', Perl executes the specified
+   program, instead of parsing the script. See the beginning of the
+   perlrun(1) manual page for further details.
+
+-- In the following simple trick, suggested by the perlrun(1) manual
+   page, we include the word `perl' into the 1st line:
+
+	#! /bin/sh -- # -*- perl -*-
+	eval 'exec perl -S $0 ${1+"$@"}'
+	if 0;
+	# real Perl code begins here
+
+   This fails to work on many systems, including Linux, because the OS
+   invokes the command line (`/bin/sh', `-- # *-* perl -*-',
+   `./my_script.pl'), and the shell gives an unpleasant error message about
+   the completely bogus switch.
+
+-- We can completely omit the 1st line:
+
+	eval 'exec perl -S $0 ${1+"$@"}'
+	if 0;
+	# real Perl code begins here
+
+   This solution is inspired by Thomas Esser's epstopdf utility, and it
+   seems to work on Linux systems with both `perl my_script.pl' and
+   `./my_script.pl'. (Don't bookmark the solution though, there are many
+   better to come.) The major flaw in this script is that it relies on the
+   fact that the operating system recognises executables beginning with
+   ASCII characters as ``scripts'', and runs them through /bin/sh. On some
+   systems, a ``Cannot execute binary file'' or ``Exec format error'' may
+   occur.
+
+   Note that this script is quite tricky since the first line is valid in
+   both Perl and Bourne-compatible shells. (It doesn't work in the C Shell,
+   but we'll solve that problem later on.)
+
+   The solution has another problem: if someone gives the script a weird
+   filename with spaces and other funny characters in it, such as
+
+	-e system(halt)
+
+   , then the command
+
+	perl -S -e system(halt)
+
+   will be executed, which is a disaster when there is a dangerous program
+   named `halt' on the user's $PATH. This problem can be solved easily, by
+   quoting `$0' from the shell, and prefixing it with `--' to prevent Perl
+   from recognising further options.
+
+-- We have two conflicting requirements for the `#!' line: the portability
+   requirement is that it must be exactly `#! /bin/sh'; but it must contain
+   the word `perl' to avoid the infinite DEBUG loop described above. There
+   is no single line can satisify both of these requirements, but what about
+   having *two* lines, and run `perl -x', so the OS will parse the first,
+   and Perl will find the second.
+
+	#! /bin/sh
+	eval 'exec perl -S -x -- "$0" ${1+"$@"}'
+	if 0;
+	#!perl -w
+	# real Perl code begins here
+
+   The trick here is that Perl, when invoked with the `-x' switch,
+   ignores everything up to `#!perl'. Users of non-UNIX systems should invoke
+   this script with `perl -x'. UNIX users may freely choose any of `perl
+   my_script.pl', `perl -x my_script.pl', `./my_script.pl', and even
+   `sh my_script.pl'.
+	
+   The subtle bilingual tricks in this script are worth studying. When the
+   file is read by `perl -x', it quickly skips to the real Perl code. When
+   the file is read by the shell, it executes the line with `eval': it calls
+   `perl -x' with the script filename and command line arguments. The
+   double-quotes and `$@' are shell script wizardry, so things will work
+   even when arguments contain spaces or quotes. The `-S' option tells Perl
+   to search for the file on the $PATH again, because most shells leave `$0'
+   unchanged (i.e. `$0' is the command the user has typed in).
+
+   Although the second and the third lines contain valid no-op Perl code,
+   Perl never interprets these lines, because of the `-x' switch. These
+   lines are also completely ignored by `perl my_script.pl', because that
+   immediately invokes /bin/sh. However, when the user loads this script
+   with the `do' Perl builtin, the 2nd and the 3rd line gets compiled and
+   interpreted, and a harmless no-op code is run, and no syntax error
+   occurs.
+
+There are still deficiencies remaining:
+
+-- It doesn't work in the C shell. We already know how to solve this.
+
+-- It reports line numbers in error messages relative to the `#!perl -w' line.
+
+   The `do' Perl builtin can be used to re-read the script with a construct
+   like this:
+   
+     	BEGIN{ if(!$second_run){ $second_run=1; do($0); die $@ if $@; exit }}
+   
+   `BEGIN' is required here to prevent Perl from compiling the whole file
+   and possibly complaining about syntax errors with the wrong line numbers.
+   The `die $@ if $@' instruction
+   will print runtime error messages correctly. See perlvar(1) for details
+   about `$@'. Unfortunately the following code
+
+     	BEGIN{ if(!$second_run){ $second_run=1; do($0); die $@ if $@; exit }}
+   	die 42;
+
+   yields an extra error message ``BEGIN failed--compilation aborted''. This
+   error is confusing, since `die 42' causes a run-time and not compile-time
+   error. To get rid of the message, we should eliminate `exit' somehow, and
+   tell Perl not to continue parsing the input after `}}'.
+
+-- It prints warnings when locale settings are invalid. (Try setting
+   `export LANG=invalid' in Bash before running the script to see the ugly
+   warning messages.)
+
+   The locale warning is a multi-line message starting with
+   `perl: warning: Setting locale failed.'. Perl emits this if the
+   locale settings specified in the environment variables LANG, LC_ALL and
+   LC_* are incorrect. See perlllocale(1) for details. The real fix for this
+   warning is installing and specifying locale correctly. However, most Perl
+   scripts don't use locale anyway, so a broken locale doesn't do any harm
+   for them.
 
    Although Perl is a good diagnostics tool for locale problems, most of the
    time we don't want such warning messages, especially not in CGI (these
    warnings would fill the webserver's logfile), and not in some system
    daemon processes, when the program is prohibited to write to stderr on
-   normal operation. The system administrator should really fix locale, but
-   it may take him weeks to schedule, understand and do this task, and most
-   users don't have time to wait weeks to run a Perl script.
+   normal operation. The system administrator should really fix locale
+   settings, but it may take him weeks to schedule, understand and do this
+   task, and most users don't have time to wait weeks to run a single Perl
+   script that doesn't depend on locale anyway.
    
-   Combining it all together:
-   
-	#! /bin/sh --
-	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
-	;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
-	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'x0;
-	#!perl -w
-	BEGIN{if($ENV{PERL_BADLANG}++eq'x'){$0=~/(.*)/s;do$1;$@?die$@:exit}}
-	# real Perl code begins here
+   The perllocale(1) man page says that PERL_BADLANG should be set to a true
+   value to get rid of locale warnings. Actually, PERL_BADLANG must be set
+   to a non-empty, non-numeric string (i.e `PERL_BADLANG=1' doesn't work).
+   So we'll set it to `PERL_BADLANG=x' in the shell script section.
+   Note that this has no effect if Perl is
+   invoked _before_ the shell, for example all of `perl', `perl -x', `perl
+   -S', `perl -x -S' emit the warning long before the shell has a chance to
+   change PERL_BADLANG.
 
-   This piece of code adds several other tricks, left as an exercise to the
-   reader. The last few characters of the second line seem to be
-   superfluous, but they aren't, because csh doesn't allow the break the
-   line in the midst of the string without a backslash.
-   
-   There are still problems: exit(1) and die() also print the
-   `BEGIN failed--' line.
-   
--- Here comes Magic Perl Header 3. No problems, but the solution is dirty.
-   
-	#! /bin/sh --
-	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
-	;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
-	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'x0;
-	#!perl -w
-	BEGIN{if($ENV{PERL_BADLANG}++eq'x'){eval'sub exit_($){die"exit $_[0]
-	"}';$0=~/(.*)/s;do$1;exec'/bin/sh','-c',$@if$@=~/^exit \d+$/;if($@){
-	print STDERR$@;exec'/bin/sh','-c','exit 255'}exit}}
-	# Magic Perl Header (lines 1-9) by pts@fazekas.hu. Don't touch it!
-	# real Perl code begins here
-
-   The solutoin seems to be overcomplicated, and full of pointless wizardry.
-   The toughest task is to cleanly exit from a `BEGIN { }' block with
-   exit(1) or die(), beacuse Perl prints an additional `BEGIN failed--'
-   error message in such cases.
-
-   The trick to avoid the extra error message is to exec() another process
-   (/bin/sh), and make it exit with the desired exit code. The program above
-   works fine for both compile-time and run-time errors. The user should
-   call exit_() instead of exit() in her program.
-
--- Here comes final the Magic Perl Header. Clean design, no problems.
-
-	#! /bin/sh --
-	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
-	;exec perl -x -S -- "$0" ${1+"$@"};#'if 0;
-	eval 'setenv PERL_BADLANG x;exec perl -x -S -- "$0" $argv:q;#'x0;
-	#!perl -w
-	BEGIN{if(!$,++){$==$^W;$^W=0;$0=~/(.*)/s;do$1;die$@if$@;$,++}}return if
-	$,==2;if($,==3){$^W=$=;$==60;$0=~/(.*)/s;do$1;die$@if$@;exit 0}$,="";
-	# [...] lines 1--8: http://www.inf.bme.hu/~pts/Magic.Perl.Header
-
-   0. The script should have executable attribute on UNIX systems.
-   1. /bin/sh or some other shell exec()s `perl -x'.
-   2. `perl -x' skips to the the `#!perl' line, and starts compilation with
-      the `BEGIN' line having line number 2.
-   3. The `BEGIN' block is evaluated: since $, is initially false, the
-      first `do' is invoked to compile and run the script again (with the
-      correct line numbers).
-   4. Now $, is 2, the `BEGIN' block does nothing, and after that, `return'
-      returns to the caller `do'.
-   5. `die$@if$@' inside the `BEGIN' block aborts if there were compile-time
-      errors. The errors are printed with correct line numbers, and an
-      additional `BEGIN failed--compilation aborted' message is displayed.
-      This isn't annoying now, since it perfectly describes the situation.
-   6. The `BEGIN' block has finished, $, is 3 now. `do' is invoked inside
-      `if($,==3)' that compiles and runs the script. Warnings are
-      printed in this stage only. As a side effect, warnings are displayed
-      only if there were no compilation errors in step 5.
-   7. If a runtime error occurs, `die$@if@$' prints it, and aborts. The
-      programmer may call exit(...) anywhere in the script. Otherwise, an
-      explicit exit(0) is called to signal normal termination.
-
-   Understanding the usage of the global variables `$,', `$=' and `$^W' is 
-   left as an exercise to the reader.
-
-   The command line options `-n' and `-p' should not be used!
-
-   The only drawback of this solution is speed: a script without errors is
-   compiled 3 times before it gets a chance to run, and even the shell is
-   spawned at stage 1, so this would make CGI scripts very slow.
-
-Our conclusion is that the programmer must make choose either superior and
-universal compatiblity or quick startup -- she cannot have both of them.
+Fast alternative
+~~~~~~~~~~~~~~~~
+An intermediate solution with some limitations is presented there.
 
 If really fast startup is desired, and the programmer is sure about the
 location of the `perl' interpreter (/usr/local/bin/perl in this example),
 the following solution is recommended:
 
 	#! /usr/local/bin/perl -T
+	## not recommended for general use because of limited portability
 	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
 	;exec perl -T -S -- "$0" ${1+"$@"};#'if 0;
 	eval 'setenv PERL_BADLANG x;exec perl -T -S -- "$0" $argv:q;#'x0;
 	# Don't touch/remove lines 1--5: http://www.inf.bme.hu/~pts/Magic.Perl.Header
 	# real Perl code begins here
-	BEGIN{$^W=1} # turn on warnings; no options allowed 
+	BEGIN{$^W=1} # turn on warnings; no command line options allowed
 
 This script must have executable attribute on UNIX systems. When the `perl'
 interpreter is correctly specified, the script can be started as
 `./script.pl', and it would run quickly. Otherwise, `sh ./script.pl' should
 be used to start the script. Only `-T' should be specified as a command line
-option (all 3 spaces), other options should be emulated with `BEGIN { }'
+option (all 3 occurences), other options should be emulated with `BEGIN { }'
 blocks.
 
-Compatibility problems with this solution:
+This header should be used only in environments controlled by the writer of
+the script (i.e Linux install floppies), because locale warnings are printed
+iff locale settings are incorrect, and the path to `perl' is hard-coded
+into the script.
 
--- No ultimate way to start: `sh ./script.pl' is slow, `./script.pl'
-   may not work when the script is copied to another system.
--- Locale warnings are printed iff locale is settings are incorrect and
-   script was started as `./script.pl'.
+Magic?
+~~~~~~
+Combining it all together, here comes the final and magnificient
+Magic Perl Header, version 6:
 
-The easdy recipe of the compatible Perl script
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	#! /bin/sh --
+	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
+	;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
+	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'.q
+	#!perl -w
+	+($0=~/(.*)/s);do(index($1,"/")<0?"./$1":$1);die$@if$@;__END__+if 0;
+	# real Perl code begins here
+
+The file should have the executable attribute on UNIX systems.
+
+This header is valid in multiple languages, so its meaning depends on the
+interpreter. Fortunately the final effect of the header in all interpreters
+is that `perl' gets invoked running the real Perl code after the header.
+Let's see how the header achieves this.
+
+-- When executed with `perl', without the `-x' switch, Perl runs /bin/sh
+   immediately. (/bin/sh may be any type of shell.)
+
+-- Bourne and Korn shell variants interpret the file as:
+
+	#! /bin/sh --
+	true && eval '...; exec perl -T -x -S "$0" #{1+"$@"}'  # comment
+	garbage
+
+   So they run `perl -x'.
+
+-- C shell variants interpret the file as:
+
+	#! /bin/sh --
+	false && eval '...' ;
+	eval '...; exec perl -T -x -S -- "$0" $argv:q'  # comment
+	garbage
+
+   So they run `perl -x'.
+
+   The backslash in the end of the second line seems to be
+   superfluous, but it isn't, since csh doesn't allow the break the
+   line in the midst of the string without a backslash.
+
+-- The operating system runs the file by running /bin/sh, some shell
+   variant. This is true even for ancient systems that don't know about the
+   `#!'-hack, but just treat ASCII files as shell scripts.
+
+-- `perl -x' interprets the file as:
+
+	#!perl -w
+	untaint $0; do $0; die $@ if $@; __END__
+	garbage
+
+    So it runs the current file again, with `do', not respecting the `#!'
+    lines. This is a good idea, to make error line numbers come out right.
+
+    The only way to untaint a value is regexp subexpression matching. We
+    use it in `$0=~/(.*)/s'.
+
+-- `do $0' treats the file as:
+
+	eval 'garbage' if 0;
+	eval 'garbage' . q+garbage+ if 0;
+	# real Perl code
+
+   `do $0' doesn't consult $ENV{PATH} for the location of the script (it
+   iterates over `@INC'), but by the time `do $0' is invoked, $0 already has
+   the relevant component of $ENV{PATH} prepended to it if a path search was
+   done, so `@INC' won't be examined here. Note that $0 may be a relative
+   pathname, but this isn't a problem since chdir() was not called since the
+   path search. Without the `index' function in the script, `do' would have
+   looked at `@INC' and found the Perl built-in ftp.pl instead of our magic
+   script named ftp.pl, when calling `perl -x ftp.pl' in the current
+   directory.
+
+-- The real Perl code is compiled only once, because the previous read
+   (invoking `do $0') has finished compilation at the __END__ token. The
+   real compilaion bypasses the __END__ token, because it is part of the
+   single-quoted string `q+garbage+'.
+
+-- Error line numbers are reported correctly, because compilation occurs
+   inside `do', which ignores `#!'. Both compile-time and run-time errors,
+   including manual calls to die(),
+   are caught and reported early by `die $@ if $@' statement. Each error is
+   reported only once, because the real Perl code is compiled once.
+
+-- The real code may contain any number of exit(), exec(), fork() and die()
+   calls, they will work as expected. `return' outside a subroutine is
+   fortunately disallowed in pure Perl, so we don't have to treat this case.
+
+So the real Perl code gets executed, even on old UNIX systems, no matter how
+the user starts the program. The header is suitable for inclusion into CGI
+scripts. (In non-CGI programs, where extreme security is not important,
+occurences of the `-T' option can be removed.)
+
+All of the following work perfectly, without the locale-warning:
+
+	DIR/nice.pl        # preferred
+	ash  DIR/nice.pl
+	sh   DIR/nice.pl
+	bash DIR/nice.pl
+	csh  DIR/nice.pl
+	tcsh DIR/nice.pl
+	ksh  DIR/nice.pl
+	zsh  DIR/nice.pl
+
+The following invocations are fine:
+
+	perl -x -S DIR/nice.pl  # locale-warning
+	perl DIR/nice.pl        # locale-warning
+	perl -x DIR/nice.pl     # locale-warning
+	perl -x -S nice.pl      # locale-warning; only if on $PATH
+	perl nice.pl            # locale-warning; only from curdir
+	perl -x nice.pl         # locale-warning; only from curdir
+	nice.pl                 # only if on $PATH (or $PATH contains `.')
+
+The following don't work, because buggy Perl 5.004 tries to run
+`/bin/sh -S nice.pl':
+
+	perl -S nice.pl         # doesn't work 
+        perl -S DIR/nice.pl     # doesn't work
+
+Of course there is a noticable performance penalty: /bin/sh is started each
+time the script is invoked. This cannot be completely avoided, since
+PERL_BADLANG has to be set before `perl' gets invoked. After the shell has
+finished running, 1 line of helper Perl code is parsed (after `#!perl'),
+and the `do' causes 5 lines of helper code to be parsed. The time and memory
+spent on these 6 lines is negligable. So the only the action that slows
+script startup down is the shell. If the user sets and exports
+PERL_BADLANG=x, fast startup is possible by calling:
+
+	perl -x -S nice.pl
+	perl -x DIR/nice.pl
+
+In a Makefile, you should write:
+
+	export PERL_BADLANG=x
+	goal:
+		perl -x DIR/nice.pl
+
+The command line options `-n' and `-p' would fail with this header. This is
+not a serious problem, since `-n' can be implemented as wrapping the code
+inside `while (<>) { ... }', and `-p' can be changed to the wrapping
+`while (<>) { ... } continue { print }'.
+
+Header Wizard
+~~~~~~~~~~~~~
+The author has implemented a Header Wizard which automatically adds the
+Magic Perl Header to existing Perl scripts. The Header Wizard is available
+from:
+
+	http://www.inf.bme.hu/~pts/Magic.Perl.Header/magicc.pl.zip
+
+The easy recipe of the compatible Perl script:
+
 1. Write your Perl script as usual. You may call exit() and die() as you
-   like. (You may even call return(), but this is deprecated.)
+   like.
 
 2. Specify the `#! ... perl' line as usual. You may put any number of
-   options, but the `-T' option must be specified alone (separated with
-   spaces). See perlrun(1) and perlsec(1) for more information about the
-   `-T' option.
+   options, but the `-T' option must either missing, or specified alone
+   (separated with spaces). Example: `#! /dummy/perl -wi.bak -T'. See
+   perlrun(1) and perlsec(1) for more information about the `-T' option.
 
-3. Run the suppied magicc.pl that will prepend an 8-line Magic Perl Header
-   containing the right options to the script, and it will make the script
-   file executable (with `chmod +x ...'). (The `-T' option will be moved
-   after both `exec perl's, other options will be moved after `#!perl').
+3. Run the magicc.pl (Header Wizard) that will prepend an 8-line Magic Perl
+   Header containing the right options to the script, and it will make the
+   script file executable (with `chmod +x ...'). (The `-T' option will be
+   moved after both `exec perl's, other options will be moved after
+   `#!perl', because Perl looks for switches only there).
 
 4. Run your script with a slash, but without `sh' or `perl' on the command
    line, for example: `./my_script.pl arg0 arg1 arg2'. After you have moved
    the script onto the $PATH, run it just as `my_script.pl arg0 arg1 arg2'.
    (This avoids the locale warnings and makes options take effect.)
+   Should these invocations fail on a UNIX system for whatever reason,
+   please write an e-mail to the author of this article. As a quick fix, run
+   the script with `perl -x -S ./my_script.pl arg0 arg1 arg2'. Note that on
+   Win32 systems, `perl -x -S' is the only way to run the script.
 
-5. Tell your users that that they should run the script in the way described
-   in step 4. Also tell them that they should try `perl -x -S
-   ./my_script.pl arg0 arg1 arg2' if the simple invocation fails. Some users
-   won't listen to you, and they would try running the script various ways:
+5. Tell your users that that they should run the script the way described
+   in step 4.
 
-   -- OK: perl DIR/nice.pl; may emit locale-warning
-   -- OK: perl -x DIR/nice.pl; may emit locale-warning
-   -- OK: perl -x -S nice.pl; may emit locale-warning; only if on $PATH
-   -- OK: perl -x -S DIR/nice.pl; may emit locale-warning
-   -- OK: perl nice.pl; may emit locale-warning; only from curdir
-   -- OK: perl -x nice.pl; may emit locale-warning; only from curdir
-   -- OK: DIR/nice.pl; no locale-warning
-   -- OK: nice.pl; no locale-warning; only if on $PATH
-   -- OK: ash  DIR/nice.pl; no locale-warning
-   -- OK: sh   DIR/nice.pl; no locale-warning
-   -- OK: bash DIR/nice.pl; no locale-warning
-   -- OK: csh  DIR/nice.pl; no locale-warning
-   -- OK: tcsh DIR/nice.pl; no locale-warning
-   -- OK: ksh  DIR/nice.pl; no locale-warning
-   -- OK: zsh  DIR/nice.pl; no locale-warning
-   -- OK: DIR/nice.pl; no locale-warning
-   -- OK: nice.pl; only if on $PATH (or $PATH contains `.')
-   -- Error: perl -S nice.pl; buggy Perl 5.004 tries to run `/bin/sh -S
-      nice.pl'.
+Conclusion
+~~~~~~~~~~
+How many lines does a Perl hacker need to screw in a lightbulb?
 
-Comments
-~~~~~~~~
--- Please set the env var LANG=invalid before trying nice.pl.
--- Errors and warnings are reported with correct line numbers.
--- locale-warning is a multi-line message starting with
-   `perl: warning: Setting locale failed.'. Perl emits this if the
-   locale settings specified in the environment variables LANG, LC_ALL and
-   LC_* are incorrect. See perlllocale(1) for details. The real fix for this
-   warning is installing and specifying locale correctly. However, most Perl
-   scripts don't use locale anyway, so a broken locale doesn't do any harm
-   for them. Magic Perl Header does some trickery to avoid printing the
-   warning, but these tricks do not work sometimes, because Perl prints the
-   warning earlier before the tricks have a chance to run.
--- Runs even when your system doesn't respect `#!', but starts any specific
-   shell (ash, sh, bash, csh, tcsh, ksh, zsh or perl) instead.
--- Dat: `#!perl -w' turns warnings really on, other `-w' switches are
-   redundant.
--- `$0' is an absolute pathname when the user has typed the absolute
-   pathname of the script, or the script was found from an absolute component
-   of $PATH (such as `/usr/local/bin').
--- `$0' is a relative pathname containing a slash if the user has typed a
-   relative pathname with a slash, or the script was found fram a relative
-   $PATH component (such as `.').
--- `$0' contains no slash if `perl -x' (_not_ `perl -x -S') was called and
-   the user hasn't typed a slash (i.e the script is in the current
-   directory.)
+In a modern, properly configured environment, they type
+
+	perl -m Home -e shirak
+
+The rest is magic.
 
 Revision history
 ~~~~~~~~~~~~~~~~
+[To the editor: Please don't include this chapter into the article.]
+
 1. Simple header. Without PERL_BADLANG, has a long line
 
 	#!/bin/sh --
@@ -342,6 +717,16 @@ Revision history
 	#!perl -w
 
 2. Added PERL_BADLANG.
+
+	#! /bin/sh --
+	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
+	;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
+	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'x0;
+	#!perl -w
+	BEGIN{if($ENV{PERL_BADLANG}++eq'x'){$0=~/(.*)/s;do$1;$@?die$@:exit}}
+
+   There are still problems: exit(1) and die() also print the
+   `BEGIN failed--' line.
 
 3. 9-line Magic Perl Header with the `exec ... exit' trick.
 
@@ -355,6 +740,16 @@ Revision history
 	print STDERR$@;exec'/bin/sh','-c','exit 255'}exit}}
 	# Magic Perl Header (lines 1-9) by pts@fazekas.hu. Don't touch it!
 
+   The solution seems to be overcomplicated, and full of pointless wizardry.
+   The toughest task is to cleanly exit from a `BEGIN { }' block with
+   exit(1) or die(), beacuse Perl prints an additional `BEGIN failed--'
+   error message in such cases.
+
+   The trick to avoid the extra error message is to exec() another process
+   (/bin/sh), and make it exit with the desired exit code. The program above
+   works fine for both compile-time and run-time errors. The user should
+   call exit_() instead of exit() in her program.
+
 4. 8-line Magic Perl Header with the 2-do trick and URL.
 
 	#! /bin/sh --
@@ -366,8 +761,41 @@ Revision history
 	$,==2;if($,==3){$^W=$=;$==60;$0=~/(.*)/s;do$1;die$@if$@;exit 0}$,="";
 	# Don't touch/remove lines 1--8: http://www.inf.bme.hu/~pts/Magic.Perl.Header
 
+   The only drawback of this solution is speed: a script without errors is
+   compiled 3 times before it gets a chance to run, and even the shell is
+   spawned at stage 1, so this would make CGI scripts very slow.
+   Our conclusion for version 4 is that the programmer must make choose either
+   superior and universal compatiblity or quick startup -- she cannot have both
+   of them.
+
+4b. 9-line with delete from main::
+
+#! /bin/sh --
+eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
+;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
+eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'x0;
+#!perl -wi.bak
+BEGIN{if(!$,++){$==$^W;$^W=0;%:=%::;$0=~/(.*)/s;do$1;die$@if$@;$,++}}return
+if$,==2;if($,==3){$^W=$=;$==60;$0=~/(.*)/s;for(keys%::){delete$::{$_}if!
+exists$:{$_}}%:=();do$1;die$@if$@;exit 0}$,="";
+# Don't touch/remove lines 1--9: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+
+5. 7-line. Correct error reporting, no double-compilation. Removed `--' for
+   csh.
+
+	#! /bin/sh
+	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
+	;exec perl -T -x -S -- "$0" ${1+"$@"};#'if 0;
+	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'.q
+	#!perl -w
+	+($0=~/(.*)/s);do$1;die$@if$@;__END__+if 0;
+	# Don't touch/remove lines 1--7: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+
+6. Added index("/"), so it works with `perl -x' as ftp.pl.
+
+Imp: publish article
 Imp: create homepage 
+Imp: magicc.pl (extension!) download
+Imp: verify lightbulb joke
 
 __END__
-
-<SSI COUNTER="">

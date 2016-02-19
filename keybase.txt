@@ -1,0 +1,61 @@
+==================================================================
+https://keybase.io/pts
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://pts.github.io
+  * I am pts (https://keybase.io/pts) on keybase.
+  * I have a public key with fingerprint 537D 2E8D 6FAB 3265 9A1F  8767 33BB 974C 2FE0 93F2
+
+To do so, I am signing this object:
+
+{
+    "body": {
+        "key": {
+            "eldest_kid": "01110f1fe32d1d6263e9674e11d7249ac66f46d9f8c54c896c16205dcf68203493b90a",
+            "fingerprint": "537d2e8d6fab32659a1f876733bb974c2fe093f2",
+            "host": "keybase.io",
+            "key_id": "33bb974c2fe093f2",
+            "kid": "01110f1fe32d1d6263e9674e11d7249ac66f46d9f8c54c896c16205dcf68203493b90a",
+            "uid": "51f5f6cc0a558175f85f29dc164fe900",
+            "username": "pts"
+        },
+        "service": {
+            "hostname": "pts.github.io",
+            "protocol": "https:"
+        },
+        "type": "web_service_binding",
+        "version": 1
+    },
+    "ctime": 1455897107,
+    "expire_in": 157680000,
+    "prev": "cf30d83cb03ae2bb67c1c4b62254ec0cf9e4d7987d7899e6922263cc8cf1607f",
+    "seqno": 23,
+    "tag": "signature"
+}
+
+which yields the signature:
+
+-----BEGIN PGP MESSAGE-----
+Version: GnuPG v1
+
+owGtUrtuFDEUnSwQiYhIbAkijetV4sf4NRIVClWEoIB2Nbavd60NM8PM7EK0pERQ
+ISQKKsQ30CGl2jQpEPAHQEubL8BeQDSUuLF87znH51zdV9sXssGQnbw52Pv++nzj
+4w+TPTgrri2Rqd0RKpZoBusLDh10/XgWHCoQJoRgTzww6ogTVDDQQuZAiJM016UV
+wufCaa8sz63SwhJBMXfWC0UxyzUzGpdohHyoJtA2baj6KMuZdBSUE740jAquS+KV
+FJIxY7TMLfWANfM0Eqd1lxjRnCk72A11rMXHeG3vH/j/7Hu+luPEcy+sxSXnikju
+FfdUu0jKPWiME7CDtiofQkQ3fYeORygWFsFCmmkK8be5Own9dG5+ZWnauq9tfRhb
+075vuiJR+6MmYR+DGf9WGZtQuTjDyFhA24W6QgWJSNuHJEvyaExLguUIwZMmtDAO
+CcGlUDie9A8soqT1DDvFrMHsfgnUGCEtsbkRlPIcLLZeQ+6kVtJJpTUITWmcnrXK
+eiKw9CgFe1TVqKAsGi0nUbQLk6rs5y2g460Xty9mw0G2eWmQtivbunz1z8o9+5C9
+3dl/unH6fDj7dn371nt/7467cnCevVu+vLv6+hlvNqsvJ3s7+59u1qsbPwE=
+=rIx4
+-----END PGP MESSAGE-----
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/pts
+
+==================================================================

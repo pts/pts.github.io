@@ -43,9 +43,16 @@ done
 test "$PYTHON" || die 'working Python not found'
 
 if test $# = 0; then
-  echo -n 'Enter sesamessh target: '
+  echo -n 'Enter sesamessh target: ' >&2
   read TARGET </dev/tty
+  TARGET="${TARGET% }"
+  TARGET="${TARGET# }"
   test "$TARGET" || die 'target must not be empty'
+  if test "${TARGET#setup }" != "$TARGET" || test "${TARGET#--setup }" != "$TARGET"; then
+    IS_SETUP=1
+    TARGET="${TARGET#*setup }"
+  fi
+  
   # Dash and busybox sh don't support this:
   # test -z "$BASH_SOURCE" && test -z "$ZSH_SCRIPT"
   # This is for interactive SSH in `curl ... | sh'
@@ -61,11 +68,16 @@ if test "$SESAMESSH_UK"; then
   UK="$SESAMESSH_UK"
   unset SESAMESSH_UK  # Prevent exporting.
 else
-  # We could use `read -s' here, but Dash doesn't support it.
-  echo -n 'Enter sesamessh user key: '
+  if test $# != 0; then
+    echo -n "Enter sesamessh user key for target $*: " >&2
+  else
+    echo -n 'Enter sesamessh user key: ' >&2
+  fi
   # Any byte except for \0 and \n is supported in $UK. Accented characters
   # (non-ASCII bytes) are passed as is, but they are not recommended in case
   # the encoding of the TTY changes in the future.
+  #
+  # We could use `read -s' here, but Dash doesn't support it.
   read UK </dev/tty
 fi
 test "$UK" || die 'user key must not be empty'
@@ -75,7 +87,11 @@ if test "$SESAMESSH_HK"; then
   HK="$SESAMESSH_HK"
   unset SESAMESSH_HK  # Prevent exporting.
 else
-  echo -n 'Enter sesamessh host key: '
+  if test $# != 0; then
+    echo -n "Enter sesamessh host key for target $*: " >&2
+  else
+    echo -n 'Enter sesamessh host key: ' >&2
+  fi
   read HK </dev/tty
 fi
 test "$HK" = . && HK=
@@ -185,6 +201,8 @@ def main_pre(uk):
 
   assert uk, "Empty user key."
   private_key = ""
+  if not private_key and uk == "--random":
+    private_key = os.urandom(32)
   if not private_key and len(uk) == 64:
     try:
       private_key = uk.decode("hex")
@@ -202,11 +220,13 @@ def main_pre(uk):
   if not private_key:
     # Do many iterations to make dictionary attacks harder.
     digest_cons, iterations = hashlib.sha512, 100000
-    private_key = uk + "SeKd"
+    private_key = uk + "Sekd"
     for i in xrange(iterations):
       h = digest_cons(str(i))
       h.update("SeKd")
       h.update(private_key)
+      h.update("SekD")
+      h.update(uk)
       h.update("SeKD")
       h.update(str(i))
       private_key = h.digest()

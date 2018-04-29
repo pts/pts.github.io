@@ -2,8 +2,9 @@
 # Passphrase-based SSH client. https://github.com/pts/sesamessh
 # This is free software, GNU GPL >=2.0. There is NO WARRANTY. Use at your risk.
 #
-# wget https://github.com/pts/sesamessh/blob/master/sesamessh | sh
-# wget https://pts.github.io/sesamessh | sh
+# curl -s https://pts.github.io/sesamessh | sh
+# curl -s https://github.com/pts/sesamessh/blob/master/sesamessh | sh
+# wget -q -O- https://github.com/pts/sesamessh/blob/master/sesamessh | sh
 #
 
 if true; then  # Read entire script before running it.
@@ -29,6 +30,8 @@ fi
 # Find a Python which can do the operations we need.
 # Currently only Python 2.4, 2.5, 2.6 and 2.7 are supported, Pythen 3 isn't.
 # For Python 2.4, the hashlib package needs to be installed as an extra.
+#
+# TODO(pts): Add Python 3 compatibility.
 PYCODE='import base64, hashlib, os, struct, sys; print base64.b64encode(hashlib.sha512(struct.pack(">H", int(os.getenv("HK")))).digest().encode("hex").upper().decode("hex"))'
 PYTHON=
 for PYTHON in python python2 python2.7 python2.6 python2.5 python2.4; do
@@ -42,6 +45,11 @@ if test $# = 0; then
   echo -n 'Enter sesamessh target: '
   read TARGET </dev/tty
   test "$TARGET" || die 'target must not be empty'
+  # Dash and busybox sh don't support this:
+  # test -z "$BASH_SOURCE" && test -z "$ZSH_SCRIPT"
+  # This is for interactive SSH in `curl ... | sh'
+  # (rather than `echo msg | dash ./sesamessh').
+  test "${0%ssh}" = "$0" && exec </dev/tty  # E.g. $0 is dash.
 else
   TARGET=
 fi

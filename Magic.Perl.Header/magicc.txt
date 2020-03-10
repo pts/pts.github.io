@@ -1,13 +1,13 @@
 How to start a Perl script?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 an article to a Perl magazine
-by Péter Szabó <pts@fazekas.hu>
+by PÃ©ter SzabÃ³ <pts@fazekas.hu>
 
 An improved version of this article appeared here:
 
 @article{magic_perl_header,
   title={A Magic Header for Starting {Perl} scripts},
-  author={Péter Szabó},
+  author={P{\'e}ter Szab{\'o}},
   url={http://i.cmpnet.com/ddj/tpj/images/tpj0304/0304tpj.pdf},
   year=2003,
   journal={The {Perl} Journal},
@@ -496,7 +496,7 @@ the following solution is recommended:
 	eval '(exit $?0)' && eval 'PERL_BADLANG=x;export PERL_BADLANG;: \
 	;exec perl -T -S -- "$0" ${1+"$@"};#'if 0;
 	eval 'setenv PERL_BADLANG x;exec perl -T -S -- "$0" $argv:q;#'x0;
-	# Don't touch/remove lines 1--5: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+	# Don't touch/remove lines 1--5: https://pts.github.io/Magic.Perl.Header
 	# real Perl code begins here
 	BEGIN{$^W=1} # turn on warnings; no command line options allowed
 
@@ -664,7 +664,7 @@ The author has implemented a Header Wizard which automatically adds the
 Magic Perl Header to existing Perl scripts. The Header Wizard is available
 from:
 
-	http://www.inf.bme.hu/~pts/Magic.Perl.Header/magicc.pl.zip
+	https://pts.github.io/Magic.Perl.Header/magicc.pl.zip
 
 The easy recipe of the compatible Perl script:
 
@@ -759,7 +759,7 @@ Revision history
 	#!perl -w
 	BEGIN{if(!$,++){$==$^W;$^W=0;$0=~/(.*)/s;do$1;die$@if$@;$,++}}return if
 	$,==2;if($,==3){$^W=$=;$==60;$0=~/(.*)/s;do$1;die$@if$@;exit 0}$,="";
-	# Don't touch/remove lines 1--8: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+	# Don't touch/remove lines 1--8: https://pts.github.io/Magic.Perl.Header
 
    The only drawback of this solution is speed: a script without errors is
    compiled 3 times before it gets a chance to run, and even the shell is
@@ -778,7 +778,7 @@ eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'x0;
 BEGIN{if(!$,++){$==$^W;$^W=0;%:=%::;$0=~/(.*)/s;do$1;die$@if$@;$,++}}return
 if$,==2;if($,==3){$^W=$=;$==60;$0=~/(.*)/s;for(keys%::){delete$::{$_}if!
 exists$:{$_}}%:=();do$1;die$@if$@;exit 0}$,="";
-# Don't touch/remove lines 1--9: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+# Don't touch/remove lines 1--9: https://pts.github.io/Magic.Perl.Header
 
 5. 7-line. Correct error reporting, no double-compilation. Removed `--' for
    csh.
@@ -789,7 +789,7 @@ exists$:{$_}}%:=();do$1;die$@if$@;exit 0}$,="";
 	eval 'setenv PERL_BADLANG x;exec perl -T -x -S -- "$0" $argv:q;#'.q
 	#!perl -w
 	+($0=~/(.*)/s);do$1;die$@if$@;__END__+if 0;
-	# Don't touch/remove lines 1--7: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+	# Don't touch/remove lines 1--7: https://pts.github.io/Magic.Perl.Header
 
 6. Added index("/"), so it works with `perl -x' as ftp.pl.
 

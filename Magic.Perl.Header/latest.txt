@@ -4,4 +4,4 @@ eval '(exit $?0)' && eval 'PERL_BADLANG=x;PATH="$PATH:.";export PERL_BADLANG\
 ;setenv PATH "$PATH":.;exec perl -x -S -- "$0" $argv:q;#'.q
 #!perl -w
 +push@INC,'.';$0=~/(.*)/s;do(index($1,"/")<0?"./$1":$1);die$@if$@__END__+if 0
-;#Don't touch/remove lines 1--7: http://www.inf.bme.hu/~pts/Magic.Perl.Header
+;#Don't touch/remove lines 1--7: https://pts.github.io/Magic.Perl.Header
